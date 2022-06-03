@@ -2,6 +2,7 @@
 	import { enhance } from '$lib/form';
 	import { scale } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
+	import Form from '$lib/Form.svelte';
 
 	type Todo = {
 		uid: string;
@@ -22,18 +23,23 @@
 <div class="todos">
 	<h1>Todos</h1>
 
-	<form
-		class="new"
+	<Form
 		action="/todos"
 		method="post"
-		use:enhance={{
-			result: async ({ form }) => {
-				form.reset();
-			}
+		let:state
+		on:complete={({ detail }) => {
+			detail.form.reset();
 		}}
 	>
-		<input name="text" aria-label="Add todo" placeholder="+ tap to add a todo" />
-	</form>
+		<fieldset disabled={state !== 'idle'}>
+			<input
+				class:submitting={state !== 'idle'}
+				name="text"
+				aria-label="Add todo"
+				placeholder="+ tap to add a todo"
+			/>
+		</fieldset>
+	</Form>
 
 	{#each todos as todo (todo.uid)}
 		<div
@@ -183,5 +189,9 @@
 	.save:focus {
 		transition: opacity 0.2s;
 		opacity: 1;
+	}
+
+	input.submitting {
+		opacity: 0.25;
 	}
 </style>
