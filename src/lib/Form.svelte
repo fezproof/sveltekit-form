@@ -3,26 +3,51 @@
 
 	import { page } from '$app/stores';
 	import type { HttpMethod, JSONObject } from '@sveltejs/kit/types/private';
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, tick } from 'svelte';
 
 	export let action: string = $page.url.href;
 	export let method: HttpMethod = 'post';
 
-	let state: 'idle' | 'submitting' | 'invalidating' = 'idle';
+	let idle = true;
+	let submitting = false;
+	let invalidating = false;
+
 	let result: JSONObject | undefined = undefined;
 	let submitted: FormData | undefined = undefined;
 
 	const dispatch = createEventDispatcher<{
 		submit: { submitted: FormData; form: HTMLFormElement };
-		success: { data: JSONObject | undefined; form: HTMLFormElement };
-		complete: { form: HTMLFormElement };
+		success: { data: JSONObject | undefined; form: HTMLFormElement; submitted: FormData };
+		complete: { form: HTMLFormElement; submitted: FormData };
 	}>();
+
+	const setFormState = (state: 'idle' | 'submitting' | 'invalidating') => {
+		switch (state) {
+			case 'idle': {
+				idle = true;
+				submitting = false;
+				invalidating = false;
+				break;
+			}
+			case 'submitting': {
+				idle = false;
+				submitting = true;
+				invalidating = false;
+				break;
+			}
+			case 'invalidating': {
+				idle = false;
+				submitting = false;
+				invalidating = true;
+				break;
+			}
+		}
+	};
 
 	const submit: (
 		event: SubmitEvent & { currentTarget: EventTarget & HTMLFormElement }
 	) => Promise<unknown> = async (event) => {
-		console.log('Submitted...');
-		state = 'submitting';
+		setFormState('submitting');
 
 		const form = event.currentTarget;
 
@@ -44,16 +69,19 @@
 			}
 
 			result = await res.json();
-			dispatch('success', { data: result, form });
+			setFormState('invalidating');
+			await tick();
+			dispatch('success', { data: result, form, submitted: body });
 
-			state = 'invalidating';
-			await invalidate(action);
-			dispatch('complete', { form });
+			const url = new URL(form.action);
+			await invalidate(url.href);
 
-			state = 'idle';
+			setFormState('idle');
 
+			dispatch('complete', { form, submitted: body });
 			return;
 		} catch (e: unknown) {
+			setFormState('idle');
 			// maybe handle this better
 			throw e;
 		}
@@ -66,5 +94,5 @@
 	on:submit|preventDefault={submit}
 	action={action ?? $page.url.href}
 >
-	<slot {state} {result} {submitted} />
+	<slot {idle} {submitting} {invalidating} {result} {submitted} />
 </form>
